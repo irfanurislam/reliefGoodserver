@@ -26,14 +26,15 @@ async function run() {
     console.log("Connected to MongoDB");
 
     const db = client.db("reliefGood");
-    const collection = db.collection("users");
+    const usersCollection = db.collection("users");
+    const reliefGoodsCollection = db.collection("reliefGoods");
 
     // User Registration
     app.post("/api/v1/register", async (req, res) => {
       const { name, email, password } = req.body;
 
       // Check if email already exists
-      const existingUser = await collection.findOne({ email });
+      const existingUser = await usersCollection.findOne({ email });
       if (existingUser) {
         return res.status(400).json({
           success: false,
@@ -45,7 +46,11 @@ async function run() {
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // Insert user into the database
-      await collection.insertOne({ name, email, password: hashedPassword });
+      await usersCollection.insertOne({
+        name,
+        email,
+        password: hashedPassword,
+      });
 
       res.status(201).json({
         success: true,
@@ -58,7 +63,7 @@ async function run() {
       const { email, password } = req.body;
 
       // Find user by email
-      const user = await collection.findOne({ email });
+      const user = await usersCollection.findOne({ email });
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
@@ -84,7 +89,48 @@ async function run() {
     // ==============================================================
     // WRITE YOUR CODE HERE
     // ==============================================================
+    // Middleware to check JWT token
+    const authenticateToken = (req, res, next) => {
+      const authHeader = req.headers["authorization"];
+      const token = authHeader && authHeader.split(" ")[1];
+      if (token == null) return res.sendStatus(401);
 
+      jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+      });
+    };
+
+    console.log(authenticateToken);
+
+    // CRUD Operations for Relief Goods
+    app.post("/api/v1/relief-goods", async (req, res) => {
+      const { title, category, amount, description } = req.body;
+
+      try {
+        await reliefGoodsCollection.insertOne({
+          title,
+          category,
+          amount,
+          description,
+        });
+        res
+          .status(201)
+          .json({ success: true, message: "Relief good added successfully" });
+      } catch (error) {
+        res.status(500).json({ message: "Failed to add relief good" });
+      }
+    });
+    app.get("/api/v1/relief-goods", async (req, res) => {
+      try {
+        const reliefGoods = await reliefGoodsCollection.find().toArray();
+        res.json(reliefGoods);
+      } catch (error) {
+        res.status(500).json({ message: "Failed to fetch relief goods" });
+      }
+    });
+    
     // Start the server
     app.listen(port, () => {
       console.log(`Server is running on http://localhost:${port}`);
